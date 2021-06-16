@@ -1,12 +1,13 @@
 package org.twelvehart.apps
 
-import org.twelvehart.common.{Constants, EasingFunctions, ProcessingApp}
-import Constants._
-import processing.core.{PApplet, PConstants, PImage}
-import ColorExperiments._
+import org.twelvehart.apps.ColorExperiments._
 import org.twelvehart.common.Color.ColorOps._
 import org.twelvehart.common.Color._
-import org.twelvehart.common.utils.timestamp
+import org.twelvehart.common.Constants._
+import org.twelvehart.common.{EasingFunctions, ProcessingApp}
+import processing.core.{PApplet, PConstants, PImage}
+
+import scala.util.Try
 
 class ColorExperiments(exp: Experiment) extends ProcessingApp {
   implicit val self = this
@@ -18,7 +19,7 @@ class ColorExperiments(exp: Experiment) extends ProcessingApp {
   private[this] var saveFrame: Boolean                   = false
 
   override def settings(): Unit = {
-    size(800, 800)
+    size(16000, 16000)
     smooth(10)
   }
 
@@ -46,7 +47,7 @@ class ColorExperiments(exp: Experiment) extends ProcessingApp {
       case Image =>
         background(255)
         noStroke()
-        ellipseMode(PConstants.CORNER)
+        rectMode(PConstants.CORNER)
         colorMode(PConstants.HSB, 360, 100, 100, 100)
         img = loadImage("data/celebrationday.jpg")
       case _ =>
@@ -106,35 +107,52 @@ class ColorExperiments(exp: Experiment) extends ProcessingApp {
 
   private def imagePixels(): Unit = {
     background(0)
-    val tileFactor = floor(width / max(1, mouseX))
-    val pixelSize  = width / tileFactor
+
+    // Get Level of Pixelation based on mouse position, and width of canvas
+    val tileFactor = floor(img.width / max(1, mouseX))
+    val pixelSize  = Try(img.width / tileFactor).getOrElse(1)
     val tileRange  = 0 until tileFactor
 
     img.loadPixels()
 
+    val gridLocations = tileRange
+      .flatMap(y =>
+        tileRange
+          .map(x => (y, x))
+      )
+
+    // get a list of colors by selecting each pixel
     val colors =
-      tileRange
-        .flatMap(y =>
-          tileRange
-            .map(x => (y, x))
-        )
+      gridLocations
         .map { case (y, x) => img.get(x * pixelSize, y * pixelSize) }
         .map(ColorOps.apply)
 
+    // sort the colors based on the selected mode
     val sorted = sortMode.fold(colors)(colors.sorted(_))
 
-    tileRange
-      .flatMap(gridX => tileRange.map(gridY => (gridX, gridY)))
-      .zipWithIndex
+    // redraw the sorted pixels
+    val pixelFactor = width / img.width
+    gridLocations.zipWithIndex
       .foreach {
-        case ((gridY, gridX), i) =>
+        case ((y, x), i) =>
           fill(sorted(i).c)
-          ellipse(gridX * pixelSize, gridY * pixelSize, pixelSize, pixelSize)
+          drawGrid(pixelFactor, y, x, pixelSize)
       }
 
     if (saveFrame) {
       saveFrame = false
-      saveFrame(s"data/$sketchName/frame-###.png")
+      saveFrame(s"stills/$sketchName/frame-###.png")
+    }
+  }
+
+  private[this] def drawGrid(pixelFactor: Int, y: Int, x: Int, pixelSize: Int): Unit = {
+    val newPixelSize = pixelSize * pixelFactor
+    (1 to pixelFactor).foreach { factor =>
+      val incr = newPixelSize * (factor / pixelFactor)
+      rect(x * newPixelSize, y * newPixelSize, incr, incr)
+      rect(x * newPixelSize + incr, y * newPixelSize, incr, incr)
+      rect(x * newPixelSize, y * newPixelSize + incr, incr, incr)
+      rect(x * newPixelSize + incr, y * newPixelSize + incr, incr, incr)
     }
   }
 
